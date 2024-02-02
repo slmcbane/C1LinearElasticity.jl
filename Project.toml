@@ -1,0 +1,8 @@
+name = "C1LinearElasticity"
+uuid = "c4af4911-64c2-4139-8d54-5939abe41b5b"
+authors = ["Sean McBane <sean.mcban@protonmail.com>"]
+version = "0.1.0"
+
+[deps]
+DataStructures = "864edb3b-99cc-5e75-8d2d-829cb0a9cfe8"
+LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
