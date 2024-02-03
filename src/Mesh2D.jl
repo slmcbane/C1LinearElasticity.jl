@@ -11,7 +11,7 @@ Reference node numbers start at the bottom left and run from left to right, bott
 `node_map[i]` is the true node number (i.e. used for finite element DOFs) for reference node
 number `i`. These are computed as a reverse Cuthill-McKee ordering.
 """
-struct Mesh{IntType, FloatType}
+struct Mesh{IntType,FloatType}
     nx::IntType
     ny::IntType
     node_map::Vector{IntType}
@@ -20,7 +20,7 @@ struct Mesh{IntType, FloatType}
     x0::FloatType
     y0::FloatType
 
-    Mesh{IT, FT}(nx::IT, ny::IT, dx::FT, dy::FT, x0::FT, y0::FT) where {IT <: Integer, FT <: AbstractFloat} =
+    Mesh{IT,FT}(nx::IT, ny::IT, dx::FT, dy::FT, x0::FT, y0::FT) where {IT<:Integer,FT<:AbstractFloat} =
         new(nx, ny, renumber_nodes(nx, ny), dx, dy, x0, y0)
 end
 
@@ -75,7 +75,7 @@ Assign nodes in reverse Cuthill-McKee ordering.
 function renumber_nodes(nx, ny)
     nodes = [one(nx)]
     scratch_space = Vector{typeof(nx)}[]
-    Ai_with_adjacencies = Tuple{typeof(nx), Vector{typeof(nx)}, Int}[]
+    Ai_with_adjacencies = Tuple{typeof(nx),Vector{typeof(nx)},Int}[]
     node_map = zeros(typeof(nx), (nx + 1) * (ny + 1))
     node_map[1] = 1
 
@@ -118,6 +118,31 @@ function renumber_nodes(nx, ny)
     node_map
 end
 
+mutable struct NodeMap{IntType}
+    mapped::Dict{IntType,IntType}
+    reference_to_real::Vector{IntType}
+    max_node_examined::IntType
+
+    NodeMap{IT}(node_map) where {IT<:Integer} = new(Dict{IT,IT}(), node_map, zero(IT))
+end
+
+"""
+Given ni, a real node index (i.e. in the reordered order), look up the index of its reference
+node.
+"""
+function lookup!(node_map::NodeMap, ni)
+    if ni in keys(node_map.mapped)
+        pop!(node_map.mapped, ni)
+    else
+        next_to_examine = node_map.max_node_examined + 1
+        while node_map.reference_to_real[next_to_examine] != ni
+            node_map.mapped[node_map.reference_to_real[next_to_examine]] = next_to_examine
+            next_to_examine += 1
+        end
+        node_map.max_node_examined = next_to_examine
+    end
+end
+
 """
 sparsity(mesh)
 
@@ -127,47 +152,49 @@ the stiffness matrix is symmetric.
 
 This accounts for the 8 degrees of freedom collocated at each node.
 """
-function sparsity(mesh::Mesh{IntType}) where IntType
-    IJ = Tuple{IntType, IntType}[]
+function sparsity(mesh::Mesh{IntType}) where {IntType}
+    I = [one(IntType)]
+    J = IntType[]
     scratch_space = Vector{IntType}[]
-    for ni in 1:(mesh.nx + 1) * (mesh.ny + 1)
-        i = (mesh.node_map[ni] - 1) * 8 + 1
-        for j in i:i+7
-            for k in j:i+7
-                push!(IJ, (k, j))
-            end
-        end
+    real_to_reference = NodeMap{IntType}(mesh.node_map)
+
+    for real_index in 1:(mesh.nx+1)*(mesh.ny+1)
+        ni = lookup!(real_to_reference, real_index)
+        # Get the adjacencies for this node.
         Ai = get_adjacent_nodes(ni, mesh.nx, mesh.ny, scratch_space)
-        for nj in Ai
-            j = (mesh.node_map[nj] - 1) * 8 + 1
-            if i > j
-                for k in i:i+7
-                    for l in j:j+7
-                        push!(IJ, (k, l))
-                    end
+        # Map adjacent nodes to their reordered indices
+        for i in eachindex(Ai)
+            Ai[i] = mesh.node_map[Ai[i]]
+        end
+        # Filter previously considered nodes (we create only the lower triangular part,
+        # or upper triangular if in CSR format). 
+        filter!(>(real_index), Ai)
+        # Sort in ascending order so that indices are in the correct order.
+        sort!(Ai)
+
+        outer_first_dof = (real_index - 1) * 8 + 1
+        outer_last_dof = outer_first_dof + 7
+        for i in outer_first_dof:outer_last_dof
+            # Indices for degrees of freedom associated to this node.
+            for j in i:outer_last_dof
+                push!(J, j)
+            end
+
+            # Indices for each adjacent node
+            for nj in Ai
+                inner_first_dof = (nj - 1) * 8 + 1
+                inner_last_dof = inner_first_dof + 7
+                for j in inner_first_dof:inner_last_dof
+                    @assert j > i
+                    push!(J, j)
                 end
             end
+
+            # Update the colptr array
+            push!(I, length(J) + 1)
         end
+        push!(scratch_space, Ai)
     end
-    
-    sort!(IJ)
-    I = IntType[]
-    J = IntType[]
-    first = 1
-    second = 2
-    n = length(IJ)
-    while first <= n
-        # Advance the second pointer
-        while second <= n && IJ[second] == IJ[first]
-            second += 1
-        end
-        push!(J, IJ[first][2])
-        if isempty(I) || IJ[first][1] != IJ[first-1][1]
-            push!(I, length(J))
-        end
-        first = second
-    end
-    push!(I, length(J) + 1)
     I, J
 end
 
