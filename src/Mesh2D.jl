@@ -119,6 +119,59 @@ function renumber_nodes(nx, ny)
 end
 
 """
+sparsity(mesh)
+
+Returns just the sparsity pattern, i.e. the I, J arrays for a CSR format matrix,
+given the mesh. The returned sparsity has only the lower triangular part, since
+the stiffness matrix is symmetric.
+
+This accounts for the 8 degrees of freedom collocated at each node.
+"""
+function sparsity(mesh::Mesh{IntType}) where IntType
+    IJ = Tuple{IntType, IntType}[]
+    scratch_space = Vector{IntType}[]
+    for ni in 1:(mesh.nx + 1) * (mesh.ny + 1)
+        i = (mesh.node_map[ni] - 1) * 8 + 1
+        for j in i:i+7
+            for k in j:i+7
+                push!(IJ, (k, j))
+            end
+        end
+        Ai = get_adjacent_nodes(ni, mesh.nx, mesh.ny, scratch_space)
+        for nj in Ai
+            j = (mesh.node_map[nj] - 1) * 8 + 1
+            if i > j
+                for k in i:i+7
+                    for l in j:j+7
+                        push!(IJ, (k, l))
+                    end
+                end
+            end
+        end
+    end
+    
+    sort!(IJ)
+    I = IntType[]
+    J = IntType[]
+    first = 1
+    second = 2
+    n = length(IJ)
+    while first <= n
+        # Advance the second pointer
+        while second <= n && IJ[second] == IJ[first]
+            second += 1
+        end
+        push!(J, IJ[first][2])
+        if isempty(I) || IJ[first][1] != IJ[first-1][1]
+            push!(I, length(J))
+        end
+        first = second
+    end
+    push!(I, length(J) + 1)
+    I, J
+end
+
+"""
 stencil(mesh)
 
 Return a 528 * num_elements array. For each element the column here has the index
