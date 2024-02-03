@@ -1,7 +1,5 @@
 module Mesh2D
 
-using DataStructures: Queue, enqueue!, dequeue!
-
 """
 The information needed to represent a structured mesh of rectangular elements. An instance
 represents a grid of nx x ny rectangular elements with dimensions dx x dy.
@@ -45,21 +43,28 @@ end
 """
 Get all nodes that share an element with node 'ni' given mesh dimensions nx and ny (in elements)
 """
-function get_adjacent_nodes(ni, nx, ny)
+function get_adjacent_nodes(ni, nx, ny, scratch_space)
     # row and col are 0-based
     row = (ni - 1) ÷ (nx + 1)
     col = (ni - 1) % (nx + 1)
 
-    adjacent = Vector{typeof(ni)}(undef, 8)
+    if isempty(scratch_space)
+        adjacent = Vector{typeof(ni)}(undef, 8)
+    else
+        adjacent = pop!(scratch_space)
+        resize!(adjacent, 8)
+    end
     # ccw from bottom left
-    adjacent[1] = (ni - (nx + 1) - 1) * (col > 0)
-    adjacent[2] = ni - (nx + 1)
-    adjacent[3] = (ni - (nx + 1) + 1) * (col < nx)
-    adjacent[4] = (ni + 1) * (col < nx)
-    adjacent[5] = (ni + (nx + 1) + 1) * (col < nx)
-    adjacent[6] = ni + (nx + 1)
-    adjacent[7] = (ni + (nx + 1) - 1) * (col > 0)
-    adjacent[8] = (ni - 1) * (col > 0)
+    @inbounds begin
+        adjacent[1] = (ni - (nx + 1) - 1) * (col > 0)
+        adjacent[2] = ni - (nx + 1)
+        adjacent[3] = (ni - (nx + 1) + 1) * (col < nx)
+        adjacent[4] = (ni + 1) * (col < nx)
+        adjacent[5] = (ni + (nx + 1) + 1) * (col < nx)
+        adjacent[6] = ni + (nx + 1)
+        adjacent[7] = (ni + (nx + 1) - 1) * (col > 0)
+        adjacent[8] = (ni - 1) * (col > 0)
+    end
 
     filter!(i -> i > 0 && i <= (nx + 1) * (ny + 1), adjacent)
 end
@@ -68,30 +73,58 @@ end
 Assign nodes in reverse Cuthill-McKee ordering.
 """
 function renumber_nodes(nx, ny)
+    nodes = [one(nx)]
+    scratch_space = Vector{typeof(nx)}[]
+    Ai_with_adjacencies = Tuple{typeof(nx), Vector{typeof(nx)}, Int}[]
     node_map = zeros(typeof(nx), (nx + 1) * (ny + 1))
     node_map[1] = 1
-    i = 2
-    node_queue = Queue{Int}()
-    enqueue!(node_queue, 1)
 
-    max_neighbor = n -> begin
-        adj = get_adjacent_nodes(n, nx, ny)
-        (maximum(@view(node_map[adj])), length(adj))
-    end
-
-    while !isempty(node_queue)
-        ni = dequeue!(node_queue)
-        adjacent = get_adjacent_nodes(ni, nx, ny)
-        filter!(n -> node_map[n] == 0, adjacent)
-        sort!(adjacent, by=max_neighbor, rev=true)
-        for n in adjacent
-            node_map[n] = i
-            i += 1
-            enqueue!(node_queue, n)
+    compare_nodes = (tup1, tup2) -> begin
+        if tup1[2] > tup2[2]
+            return true
+        elseif tup1[2] < tup2[2]
+            return false
+        elseif tup1[3] < tup2[3]
+            return true
+        elseif tup1[3] > tup2[3]
+            return false
+        else
+            return tup1[1] < tup2[1]
         end
     end
 
+    for i in 1:length(node_map)
+        empty!(Ai_with_adjacencies)
+        Ai = filter!(n -> node_map[n] == 0, get_adjacent_nodes(nodes[i], nx, ny, scratch_space))
+        for n in Ai
+            Aj = get_adjacent_nodes(n, nx, ny, scratch_space)
+            degree = length(Aj)
+            @inbounds for j in eachindex(Aj)
+                Aj[j] = node_map[Aj[j]]
+            end
+            filter!(!=(0), Aj)
+            sort!(Aj, rev=true)
+            push!(Ai_with_adjacencies, (n, Aj, degree))
+        end
+        push!(scratch_space, Ai)
+        sort!(Ai_with_adjacencies, lt=compare_nodes)
+        for (n, A, _) in Ai_with_adjacencies
+            push!(scratch_space, A)
+            push!(nodes, n)
+            node_map[n] = length(nodes)
+        end
+        length(nodes) == length(node_map) && break
+    end
     node_map
 end
+
+"""
+stencil(mesh)
+
+Return a 528 * num_elements array. For each element the column here has the index
+in the assembled sparse matrix for each lower triangular entry of the stiffness
+matrix. So if `V` is the array of non-zero values for the stiffness matrix, we can
+add element `i`'s contribution by: `V[stencil[:, i]] .+= K_map * λ`.
+"""
 
 end # module Mesh2D
