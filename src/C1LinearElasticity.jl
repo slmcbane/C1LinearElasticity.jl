@@ -1,6 +1,6 @@
 module C1LinearElasticity
 
-export Basis2D, Stiffness2D, Mesh2D
+export Basis2D, Stiffness2D, Mesh2D, Quadrature
 
 include("Basis2D.jl")
 include("Quadrature.jl")

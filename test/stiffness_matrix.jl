@@ -12,6 +12,10 @@ using ForwardDiff
 
     naive_basis = [(x, y) -> sum(basis_coefficients[i, j] * terms[j](x, y) for j in 1:16) for i in 1:16]
 
+    let x = Quadrature.five_point_rule_2d(Float64).points[7]
+        @test naive_basis[1](x...) + naive_basis[2](x...) + naive_basis[3](x...) + naive_basis[4](x...) ≈ 1.0
+    end
+
     ∂x(f) = (x, y) -> ForwardDiff.derivative(z -> f(z, y), x)
     ∂y(f) = (x, y) -> ForwardDiff.derivative(z -> f(x, z), y)
 
