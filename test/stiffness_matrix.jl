@@ -3,6 +3,7 @@ using HCubature: hcubature
 using LinearAlgebra: Symmetric
 using .Stiffness2D: K1_map
 using ForwardDiff
+using ProgressMeter: @showprogress
 
 @testset "2D stiffness tests" begin
 
@@ -35,7 +36,7 @@ using ForwardDiff
             lambda(ξ, η) * f1(ξ, η) * f2(ξ, η)
         end
 
-        I, _ = hcubature(integrand, [-1, -1], [1, 1])
+        I, _ = hcubature(integrand, [-1, -1], [1, 1], atol=1e-10)
         I
     end
 
@@ -66,9 +67,19 @@ using ForwardDiff
         lambda = (x, y) -> 1.0
         L = zeros(16)
         L[1:4] .= 1
-        #Kref = naive_K1(lambda)
+        # Kref = naive_K1(lambda)
+        # K = reshape_to_symmetric(M * L)
+        # @test K ≈ Kref
+        i = 1
+        j = 1
         K = M * L
-        @test K[1] ≈ K1_element(1, 1, lambda)
-        @test K[2] ≈ K1_element(2, 1, lambda)
+        @showprogress desc="Checking elements of K1..." for k = 1:528
+            @test isapprox(K[k], K1_element(i, j, lambda), atol=1e-10)
+            i += 1
+            if i == 33
+                j += 1
+                i = j
+            end
+        end
     end
 end
