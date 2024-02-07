@@ -68,6 +68,7 @@ using ForwardDiff
         L[1:4] .= 1
         #Kref = naive_K1(lambda)
         K = M * L
-        @test K[1] == K1_element(1, 1, lambda)
+        @test K[1] ≈ K1_element(1, 1, lambda)
+        @test K[2] ≈ K1_element(2, 1, lambda)
     end
 end

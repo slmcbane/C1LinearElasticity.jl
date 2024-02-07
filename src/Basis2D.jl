@@ -2,7 +2,7 @@ module Basis2D
 
 export map_to_points, evaluate_partials
 
-using LinearAlgebra: I, Matrix
+using LinearAlgebra: I, Matrix, mul!
 
 """
 The individual polynomial terms in each of 16 basis functions.
@@ -126,13 +126,12 @@ function map_to_points(points)
     T = points |> eltype |> eltype
     N = length(points)
     map = Matrix{T}(undef, N, 16)
+    coeffs = coefficients(T)
 
-    for j in 1:16
-        for i in 1:N
-            map[i, j] = terms[j](points[i]...)
-        end
+    for i in 1:N
+        term_values = [terms[j](points[i]...) for j in 1:16]
+        mul!(@view(map[i, :]), coeffs, term_values)
     end
-
     map
 end
 

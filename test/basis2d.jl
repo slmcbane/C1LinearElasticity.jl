@@ -7,6 +7,6 @@ using .Quadrature
         map = Basis2D.map_to_points(points)
         mapped = map * λ
         println(mapped)
-        @test all(==(1.0), mapped)
+        @test all(≈(1.0), mapped)
     end
 end
