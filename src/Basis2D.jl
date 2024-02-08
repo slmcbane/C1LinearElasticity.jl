@@ -102,10 +102,8 @@ vertex of the reference square [-1,-1] x [1, 1]
 """
 constraint_values(i, T::DataType) =
     let verts = ((-one(T), -one(T)), (-one(T), one(T)), (one(T), one(T)), (one(T), -one(T)))
-        [ (terms[i](v...) for v in verts)...,
-          (dx[i](v...) for v in verts)...,
-          (dy[i](v...) for v in verts)...,
-          (dxdy[i](v...) for v in verts)... ]
+        dofs_for_v(v) = [terms[i](v...), dx[i](v...), dy[i](v...), dxdy[i](v...)]
+        vcat((dofs_for_v(v) for v in verts)...)
     end
 
 constraint_matrix(T::DataType) = vcat((constraint_values(i, T)' for i in 1:16)...)
@@ -138,8 +136,8 @@ end
 function evaluate_partials(x, y)
     T = promote_type(typeof(x), typeof(y))
     coeffs = coefficients(T)
-    dxs = T[ dx[i](x, y) for i in 1:16 ]
-    dys = T[ dy[i](x, y) for i in 1:16 ]
+    dxs = T[dx[i](x, y) for i in 1:16]
+    dys = T[dy[i](x, y) for i in 1:16]
     coeffs * hcat(dxs, dys)
 end
 

@@ -38,11 +38,11 @@ using ProgressMeter: @showprogress
     let M = K1_map(Float64)
         lambda = (x, y) -> 1.0
         L = zeros(16)
-        L[1:4] .= 1
+        L[1:4:end] .= 1
         i = 1
         j = 1
         K = M * L
-        @showprogress desc="Checking elements of K1..." for k = 1:528
+        @showprogress desc = "Checking elements of K1..." for k = 1:528
             @test isapprox(K[k], K1_element(i, j, lambda), atol=1e-10)
             i += 1
             if i == 33
