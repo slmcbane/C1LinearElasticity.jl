@@ -27,11 +27,48 @@ function flat_K1_at_point(x, y)
     out
 end
 
+"""
+Similar to above. See my notes for definition of K2.
+"""
+function flat_K2_at_point(x, y)
+    T = promote_type(typeof(x), typeof(y))
+    dϕ = evaluate_partials(x, y)
+    out = Vector{T}(undef, 528)
+    out_index = 1
+
+    for col = 1:32
+        for row = col:32
+            i = (row - 1) ÷ 2 + 1
+            j = (col - 1) ÷ 2 + 1
+            p_i = (row + 1) % 2 + 1
+            p_j = (col + 1) % 2 + 1
+
+            if p_i == p_j
+                out[out_index] = 2 * dϕ[i, p_i] * dϕ[j, p_j] + dϕ[i, p_i % 2 + 1] * dϕ[j, p_i % 2 + 1]
+            else
+                out[out_index] = dϕ[i, p_j] * dϕ[j, p_i]
+            end
+            out_index += 1
+        end
+    end
+    out
+end
+
 function K1_map(T::DataType)
     rule = five_point_rule_2d(BigFloat)
     Q = Matrix{BigFloat}(undef, 528, 25)
     for j in 1:25
         Q[:, j] .= rule.weights[j] .* flat_K1_at_point(rule.points[j]...)
+    end
+    L = map_to_points(rule.points)
+    T.(Q * L)
+end
+
+function K2_map(T::DataType)
+    rule = five_point_rule_2d(BigFloat)
+    Q = Matrix{BigFloat}(undef, 528, 25)
+    for j in 1:25
+        Q[:, j] .= rule.weights[j] .* flat_K2_at_point(rule.points[j]...)
     end
     L = map_to_points(rule.points)
     T.(Q * L)
